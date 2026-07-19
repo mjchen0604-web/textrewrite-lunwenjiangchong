@@ -1,5 +1,5 @@
 export type TextRewriteProfile = "plain_basic_paper" | "academic_plain" | "logic_smoothing";
-export type TextRewriteMode = "instruction_pack" | "guard" | "compare";
+export type TextRewriteMode = "policy_ready" | "guard" | "compare";
 export type IssueSeverity = "error" | "warning";
 
 export interface TextRewriteGuardPolicy {
@@ -13,18 +13,9 @@ export interface TextRewriteGuardPolicy {
 }
 
 export interface TextRewriteInstructionPackResult {
-  mode: "instruction_pack";
-  source: "textrewrite";
-  tool_name: "textrewrite_instruction_pack";
+  mode: "policy_ready";
   profile: TextRewriteProfile;
   field: string;
-  guard_policy: TextRewriteGuardPolicy;
-  instruction_pack: string[];
-  prohibited_behaviors: string[];
-  output_contract: {
-    required_sections: string[];
-    rewrite_report_fields: string[];
-  };
   missing_inputs: string[];
   result: string;
   next_action: string;
@@ -55,8 +46,6 @@ export interface TextRewriteMetrics {
 
 export interface TextRewriteGuardResult {
   mode: "guard";
-  source: "textrewrite";
-  tool_name: "textrewrite_guard";
   passed: boolean;
   blocking_issue_count: number;
   issues: TextRewriteIssue[];
@@ -68,8 +57,6 @@ export interface TextRewriteGuardResult {
 
 export interface TextRewriteCompareResult {
   mode: "compare";
-  source: "textrewrite";
-  tool_name: "textrewrite_compare";
   metrics: TextRewriteMetrics;
   report: string[];
   result: string;
@@ -194,48 +181,20 @@ function buildInstructionPack(policy: TextRewriteGuardPolicy): string[] {
 export function buildTextRewriteInstructionPack(input: Input): TextRewriteInstructionPackResult {
   const profile = enumInput(input, "profile", ["plain_basic_paper", "academic_plain", "logic_smoothing"] as const, "plain_basic_paper");
   const field = stringInput(input, "field") || "general";
-  const policy = buildPolicy(input);
-  const instructionPack = buildInstructionPack(policy);
   const missingInputs = missingInputsForText(input, ["original_text"]);
-  const prohibitedBehaviors = [
-    "Do not hide sources, fabricate citations, fabricate data, or claim plagiarism-check evasion.",
-    "Do not change numbers, references, protected terms, names, variables, units, or core factual claims without explicit user approval.",
-    "Do not over-polish the text into a journal-grade style if the requested profile is plain_basic_paper.",
-    "Do not keep subjective phrases such as 我觉得, 我认为, 个人认为, 本人认为."
-  ];
-  const outputContract = {
-    required_sections: ["rewritten_text", "change_report", "preservation_check", "risk_notes"],
-    rewrite_report_fields: ["length_change", "sentence_structure_changes", "synonym_replacements", "protected_items_preserved"]
-  };
-
-  const result = [
-    "TextRewrite instruction pack",
-    "",
-    `Profile: ${profile}`,
-    `Field: ${field}`,
-    "",
-    "Instructions:",
-    bullet(instructionPack),
-    "",
-    "Output contract:",
-    bullet(outputContract.required_sections)
-  ].join("\n");
+  const result = missingInputs.length > 0
+    ? "TextRewrite policy is available. Original text is still required before rewriting."
+    : "TextRewrite policy ready.";
 
   return {
-    mode: "instruction_pack",
-    source: "textrewrite",
-    tool_name: "textrewrite_instruction_pack",
+    mode: "policy_ready",
     profile,
     field,
-    guard_policy: policy,
-    instruction_pack: instructionPack,
-    prohibited_behaviors: prohibitedBehaviors,
-    output_contract: outputContract,
     missing_inputs: missingInputs,
     result,
     next_action: missingInputs.length > 0
       ? "Ask the user or client model for original_text before rewriting."
-      : "Use this pack to rewrite the text, then call textrewrite_guard on the original and revised text."
+      : "Proceed with rewriting according to the configured policy, then call textrewrite_guard on the original and revised text."
   };
 }
 
@@ -320,8 +279,6 @@ export function buildTextRewriteGuard(input: Input): TextRewriteGuardResult {
 
   return {
     mode: "guard",
-    source: "textrewrite",
-    tool_name: "textrewrite_guard",
     passed,
     blocking_issue_count: blockingIssueCount,
     issues,
@@ -373,8 +330,6 @@ export function buildTextRewriteCompare(input: Input): TextRewriteCompareResult 
 
   return {
     mode: "compare",
-    source: "textrewrite",
-    tool_name: "textrewrite_compare",
     metrics,
     report,
     result,

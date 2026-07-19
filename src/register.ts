@@ -14,16 +14,18 @@ type TextRewriteBuilder = (args: Record<string, unknown>) => {
 
 function textRewriteResult(args: Record<string, unknown>, builder: TextRewriteBuilder): CallToolResult {
   const structuredContent = builder(args);
+  const text = [structuredContent.next_action, structuredContent.result].filter(Boolean).join("\n\n");
   return {
     content: [
       {
         type: "text",
-        text: `${structuredContent.next_action}\n\n${structuredContent.result}\n\n${JSON.stringify(structuredContent, null, 2)}`
+        text
       }
     ],
     structuredContent: structuredContent as unknown as Record<string, unknown>
   };
 }
+
 
 const toolAnnotations = {
   readOnlyHint: true,
@@ -64,21 +66,6 @@ const compareInputSchema = {
   revised_text: z.string().min(1).describe("Rewritten text to compare against original_text.")
 };
 
-const guardPolicyOutputSchema = z.object({
-  target_word_ratio_min: z.number().describe("Minimum revised/original length ratio applied by the guard."),
-  target_word_ratio_max: z.number().describe("Maximum revised/original length ratio applied by the guard."),
-  protected_terms: z.array(z.string()).describe("Protected terms applied by the guard."),
-  preserve_numbers: z.boolean().describe("Whether number preservation is enforced."),
-  preserve_citations: z.boolean().describe("Whether citation preservation is enforced."),
-  remove_subjective_phrases: z.boolean().describe("Whether subjective phrases are flagged."),
-  keep_core_meaning: z.boolean().describe("Whether core meaning preservation is part of the policy.")
-});
-
-const outputContractSchema = z.object({
-  required_sections: z.array(z.string()).describe("Sections the client model should include when it rewrites."),
-  rewrite_report_fields: z.array(z.string()).describe("Fields to include in the rewrite report.")
-});
-
 const issueSchema = z.object({
   severity: z.enum(["error", "warning"]).describe("Issue severity."),
   code: z.string().describe("Stable issue code."),
@@ -108,23 +95,15 @@ const commonTextFields = {
 };
 
 const instructionPackOutputSchema = {
-  mode: z.literal("instruction_pack"),
-  source: z.literal("textrewrite"),
-  tool_name: z.literal("textrewrite_instruction_pack"),
+  mode: z.literal("policy_ready"),
   profile: z.enum(["plain_basic_paper", "academic_plain", "logic_smoothing"]).describe("Normalized rewrite profile."),
   field: z.string().describe("Normalized subject area or general."),
-  guard_policy: guardPolicyOutputSchema,
-  instruction_pack: z.array(z.string()).describe("Rewrite instructions for the client model."),
-  prohibited_behaviors: z.array(z.string()).describe("Behaviors the client model must avoid."),
-  output_contract: outputContractSchema,
   missing_inputs: z.array(z.string()).describe("Required inputs still missing."),
   ...commonTextFields
 };
 
 const guardOutputSchema = {
   mode: z.literal("guard"),
-  source: z.literal("textrewrite"),
-  tool_name: z.literal("textrewrite_guard"),
   passed: z.boolean().describe("True when no blocking error-level issues were found."),
   blocking_issue_count: z.number().describe("Number of error-level issues."),
   issues: z.array(issueSchema).describe("Detected guard issues."),
@@ -135,8 +114,6 @@ const guardOutputSchema = {
 
 const compareOutputSchema = {
   mode: z.literal("compare"),
-  source: z.literal("textrewrite"),
-  tool_name: z.literal("textrewrite_compare"),
   metrics: metricsSchema,
   report: z.array(z.string()).describe("Compact comparison report lines."),
   ...commonTextFields

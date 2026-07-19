@@ -67,7 +67,7 @@ async function withServer(port, fn) {
   }
 }
 
-test('instruction pack returns plain basic paper rewrite contract without deployment leakage', () => {
+test('instruction pack returns a compact public policy handle without exposing hidden rules', () => {
   const result = buildTextRewriteInstructionPack({
     profile: 'plain_basic_paper',
     original_text: '本研究通过复杂机制显著提升了系统性能。我认为该方法具有较高创新性。',
@@ -77,14 +77,16 @@ test('instruction pack returns plain basic paper rewrite contract without deploy
     target_word_ratio_max: 1.1
   });
 
-  assert.equal(result.mode, 'instruction_pack');
-  assert.equal(result.source, 'textrewrite');
-  assert.equal(result.tool_name, 'textrewrite_instruction_pack');
+  assert.equal(result.mode, 'policy_ready');
+  assert.equal(result.source, undefined);
+  assert.equal(result.tool_name, undefined);
   assert.equal(result.profile, 'plain_basic_paper');
-  assert.ok(result.instruction_pack.some((item) => /调整语序|同义/.test(item)));
-  assert.ok(result.instruction_pack.some((item) => /不改变原文核心/.test(item)));
-  assert.ok(result.guard_policy.protected_terms.includes('系统性能'));
-  assert.ok(result.output_contract.required_sections.includes('rewritten_text'));
+  assert.equal(result.guard_policy, undefined);
+  assert.equal(result.instruction_pack, undefined);
+  assert.equal(result.prohibited_behaviors, undefined);
+  assert.equal(result.output_contract, undefined);
+  assert.match(result.result, /policy ready/i);
+  assert.doesNotMatch(result.result, /instruction_pack|调整语序|同义|不改变原文核心|protected_terms|prohibited_behaviors/i);
   assert.doesNotMatch(result.result, /\/Users\/|localhost|127\.0\.0\.1|https?:\/\//);
 });
 
@@ -98,7 +100,8 @@ test('guard flags missing protected facts, subjective wording, and large length 
   });
 
   assert.equal(result.mode, 'guard');
-  assert.equal(result.tool_name, 'textrewrite_guard');
+  assert.equal(result.tool_name, undefined);
+  assert.equal(result.source, undefined);
   assert.equal(result.passed, false);
   assert.ok(result.issues.some((issue) => issue.code === 'missing_number'));
   assert.ok(result.issues.some((issue) => issue.code === 'missing_citation'));
@@ -128,7 +131,8 @@ test('compare reports length punctuation and preservation metrics', () => {
   });
 
   assert.equal(result.mode, 'compare');
-  assert.equal(result.tool_name, 'textrewrite_compare');
+  assert.equal(result.tool_name, undefined);
+  assert.equal(result.source, undefined);
   assert.ok(result.metrics.original_length > 0);
   assert.ok(result.metrics.revised_length > 0);
   assert.ok(result.report.some((item) => /字数|长度|标点/.test(item)));
@@ -169,8 +173,11 @@ test('MCP tools/list exposes explicit input and output schemas for ChatGPT Apps'
 
     const pack = tools.find((tool) => tool.name === 'textrewrite_instruction_pack');
     assert.ok(pack.inputSchema.required.includes('original_text'));
-    assert.equal(pack.outputSchema.properties.guard_policy.type, 'object');
-    assert.equal(pack.outputSchema.properties.instruction_pack.type, 'array');
+    assert.equal(pack.outputSchema.properties.mode.const, 'policy_ready');
+    assert.equal(pack.outputSchema.properties.guard_policy, undefined);
+    assert.equal(pack.outputSchema.properties.instruction_pack, undefined);
+    assert.equal(pack.outputSchema.properties.prohibited_behaviors, undefined);
+    assert.equal(pack.outputSchema.properties.output_contract, undefined);
   });
 });
 
@@ -190,7 +197,7 @@ test('MCP tools/call returns structuredContent that validates against outputSche
     });
 
     assert.equal(response.result.structuredContent.mode, 'guard');
-    assert.equal(response.result.structuredContent.tool_name, 'textrewrite_guard');
+    assert.equal(response.result.structuredContent.tool_name, undefined);
     assert.equal(typeof response.result.structuredContent.passed, 'boolean');
     assert.ok(Array.isArray(response.result.structuredContent.issues));
   });
